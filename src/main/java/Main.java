@@ -20,9 +20,44 @@ import java.util.stream.Stream;
 
 public class Main {
     public static Logger log  = LoggerFactory.getLogger("hw3_1");
+
     public static void main(String[] args) {
         Configuration conf = HBaseConfiguration.create();
         conf.addResource(new Path("/home/nima/bin/hbase-2.1.1/conf", "hbase-site.xml"));
+        Connection conn;
+        long maleCount = 0;
+        long femaleCount = 0;
+        long otherCount = 0;
+        try {
+            conn = ConnectionFactory.createConnection(conf);
+            Table patients = conn.getTable(TableName.valueOf("patients"));
+            loadPatients(conf);
+            Scan patientScan = new Scan();
+            patientScan.addColumn(Bytes.toBytes("demographics"),Bytes.toBytes("gender"));
+            ResultScanner patientScanner = patients.getScanner(patientScan);
+            for(Result patient: patientScanner){
+                String gender = Bytes.toString(patient.getValue(Bytes.toBytes("demographics"),Bytes.toBytes("gender")));
+                if(gender.equals("0")){
+                    maleCount++;
+                }
+                else if(gender.equals("1")){
+                    femaleCount++;
+                }
+                else{
+                    otherCount++;
+                }
+            }
+            log.info("Male patients:"+maleCount);
+            log.info("Female patients:"+femaleCount);
+            log.info("Other patients:"+otherCount);
+        }
+        catch(IOException ex){
+            log.error(ExceptionUtils.getStackTrace(ex));
+        }
+    }
+
+    static void loadPatients(Configuration conf) throws IOException {
+        /*R1.1,R1.3*/
         Map<String,String> p1Gender = new HashMap<>();
         Map<String,String> p2Gender = new HashMap<>();
         Map<String,String> p1Asthma = new HashMap<>();
@@ -38,8 +73,7 @@ public class Main {
         p1Asthma.put("1","1");
         //9->unknown
         p1Asthma.put("8","-9");
-        //Add entry  for null
-        p1Asthma.put("NULL","-9");
+
         /*Patient2.csv mappings*/
         //0-> female
         p2Gender.put("0","1");
@@ -49,48 +83,49 @@ public class Main {
         p2Asthma.put("1","1");
         //2->No
         p2Asthma.put("2","0");
-        //Add entry  for null
-        p2Asthma.put("NULL","-9");
-        Connection conn = null;
-        try {
-            conn = ConnectionFactory.createConnection(conf);
-            Table patients = conn.getTable(TableName.valueOf("patients"));
-            BufferedReader p1 = new BufferedReader(new FileReader(Main.class.getResource("patients1.csv").getFile()));
-            //pid,gender,race,height,weight,asthma,hypertension,year
-            BufferedReader p2 = new BufferedReader(new FileReader(Main.class.getResource("patients2.csv").getFile()));
-            //"pid","gender","race","height","weight","asthma","hypertension","year"
-            p1.readLine();//skip header line
-            while (p1.ready()) {
-                String rawline = p1.readLine();
-                log.debug(rawline);
-                String[] line = rawline.split(",");
-                Put row = prepareRow(line, p1Gender, p1Asthma);
-                patients.put(row);
-                //log.debug(Bytes.toString(row.getRow()));
-            }
-            conn.close();
-        }
-        catch(IOException ex){
-            log.error(ExceptionUtils.getStackTrace(ex));
-        }
 
+        Connection conn;
+        conn = ConnectionFactory.createConnection(conf);
+        Table patients = conn.getTable(TableName.valueOf("patients"));
+        putRows("patients1.csv",patients,p1Gender,p1Asthma);
+        putRows("patients2.csv",patients,p2Gender,p2Asthma);
+        patients.close();
+        conn.close();
     }
-
+    /*R1.1*/
+    static void putRows(String resourceName, Table table,Map<String,String> genderMap,Map<String,String> asthmaMap) throws IOException{
+        BufferedReader reader = new BufferedReader(new FileReader(Main.class.getResource(resourceName).getFile()));
+        reader.readLine();//skip header line
+        while (reader.ready()) {
+            String rawline = reader.readLine();
+            String[] line = rawline.split(",");
+            Put row = prepareRow(line, genderMap, asthmaMap);
+            table.put(row);
+        }
+        reader.close();
+    }
+    /*R1.1*/
     static Put prepareRow(String[] line, Map<String,String> genderMap, Map<String,String>asthmaMap){
         Put row = new Put(Bytes.toBytes(line[0]));
-
-        row.addColumn(Bytes.toBytes("demographics"), Bytes.toBytes("gender"), Bytes.toBytes(genderMap.getOrDefault(line[1],"-8")));
+        /*R1.3*/
+        /*Set NULL to unknown for all fields*/
+        for(int i=0;i<line.length;i++){
+            if(line[i].equals("NULL")){
+                line[i] = "-9";
+            }
+        }
+        row.addColumn(Bytes.toBytes("demographics"), Bytes.toBytes("gender"), Bytes.toBytes(genderMap.getOrDefault(line[1],"-9")));
         row.addColumn(Bytes.toBytes("demographics"),Bytes.toBytes("race"),Bytes.toBytes(line[2]));
         row.addColumn(Bytes.toBytes("anthropometry"),Bytes.toBytes("height"),Bytes.toBytes(line[3]));
         row.addColumn(Bytes.toBytes("anthropometry"),Bytes.toBytes("weight"),Bytes.toBytes(line[4]));
-        row.addColumn(Bytes.toBytes("medical_history"),Bytes.toBytes("asthma"),Bytes.toBytes(asthmaMap.getOrDefault(line[5],"-8")));
+        row.addColumn(Bytes.toBytes("medical_history"),Bytes.toBytes("asthma"),Bytes.toBytes(asthmaMap.getOrDefault(line[5],"-9")));
         row.addColumn(Bytes.toBytes("medical_history"),Bytes.toBytes("hypertension"),Bytes.toBytes(line[6]));
         row.addColumn(Bytes.toBytes("other"),Bytes.toBytes("pid"),Bytes.toBytes(line[0]));
         row.addColumn(Bytes.toBytes("other"),Bytes.toBytes("year"),Bytes.toBytes(line[7]));
         return row;
     }
+    /*R1.1*/
     public static void createPatientsTable(Configuration conf) throws IOException{
-        try{
             Connection conn = ConnectionFactory.createConnection(conf);
             Admin admin = conn.getAdmin();
             List<ColumnFamilyDescriptor> columnFamilies =
@@ -104,10 +139,6 @@ public class Main {
                             .setColumnFamilies(columnFamilies)
                             .build();
             admin.createTable(patientsDesc);
-        } catch (IOException ex){
-            log.error(ExceptionUtils.getStackTrace(ex));
-            throw(ex);
-        }
     }
 
 }

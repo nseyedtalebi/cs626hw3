@@ -1,0 +1,13 @@
+patients1{
+    gender: 1-> male, 2->female
+    3652 males
+    6333 females
+    asthma:0->No,1->Yes,8->Unknown
+  }
+  
+patients2{
+    gender: 0-> female, 1-> male
+    1214 males
+    1697 females
+    asthma: 1->Yes,2->No
+  }
