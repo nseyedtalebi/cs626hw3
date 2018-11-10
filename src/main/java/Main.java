@@ -8,9 +8,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +28,8 @@ public class Main {
         long otherCount = 0;
         try {
             conn = ConnectionFactory.createConnection(conf);
+            createPatientsTable(conf);
+            loadPatients(conf);
             Table patients = conn.getTable(TableName.valueOf("patients"));
             loadPatients(conf);
             Scan patientScan = new Scan();
@@ -87,14 +87,15 @@ public class Main {
         Connection conn;
         conn = ConnectionFactory.createConnection(conf);
         Table patients = conn.getTable(TableName.valueOf("patients"));
-        putRows("patients1.csv",patients,p1Gender,p1Asthma);
-        putRows("patients2.csv",patients,p2Gender,p2Asthma);
+        putRows("/patients1.csv",patients,p1Gender,p1Asthma);
+        putRows("/patients2.csv",patients,p2Gender,p2Asthma);
         patients.close();
         conn.close();
     }
     /*R1.1*/
     static void putRows(String resourceName, Table table,Map<String,String> genderMap,Map<String,String> asthmaMap) throws IOException{
-        BufferedReader reader = new BufferedReader(new FileReader(Main.class.getResource(resourceName).getFile()));
+        InputStream s = Main.class.getResourceAsStream(resourceName);
+        BufferedReader reader = new BufferedReader(new InputStreamReader(s,"UTF-8"));
         reader.readLine();//skip header line
         while (reader.ready()) {
             String rawline = reader.readLine();
